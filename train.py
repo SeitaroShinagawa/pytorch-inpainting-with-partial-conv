@@ -76,15 +76,21 @@ img_tf = transforms.Compose(
 mask_tf = transforms.Compose(
     [transforms.Resize(size=size), transforms.ToTensor()])
 
+print("set dataset")
 dataset_train = Places2(args.root, args.mask_root, img_tf, mask_tf, 'train')
 dataset_val = Places2(args.root, args.mask_root, img_tf, mask_tf, 'val')
 
+print("prepare data iterator")
 iterator_train = iter(data.DataLoader(
     dataset_train, batch_size=args.batch_size,
     sampler=InfiniteSampler(len(dataset_train)),
     num_workers=args.n_threads))
 print(len(dataset_train))
-model = PConvUNet().to(device)
+
+print("set model")
+#model = PConvUNet().to(device)
+model = PConvUNet().to("cuda")
+model = torch.nn.DataParallel(model, device_ids=None) #device_ids=None means using all devices
 
 if args.finetune:
     lr = args.lr_finetune
@@ -104,6 +110,7 @@ if args.resume:
         param_group['lr'] = lr
     print('Starting from iter ', start_iter)
 
+print("start iteration")
 for i in tqdm(range(start_iter, args.max_iter)):
     model.train()
 
