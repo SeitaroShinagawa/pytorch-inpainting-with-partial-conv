@@ -7,7 +7,7 @@ This is an unofficial pytorch implementation of a paper, [Image Inpainting for I
 ## Requirements
 - Python 3.6+
 - Pytorch 0.4.1+
-
+- cv2 (for mask generation)
 ```
 pip install -r requirements.txt
 ```
@@ -41,7 +41,7 @@ Here are some results from the test set after the training of 500,000 iterations
 ![Results](result_iter_1000000.jpg)
 
 Shinagawa added (2018.10.13)  
-Here is an alternative result using the mask generaiton algorithm introduced by [Free-Form Image Inpainting with Gated Convolution](https://arxiv.org/abs/1806.03589) 
+Here is an alternative result using the mask generaiton algorithm introduced by [Free-Form Image Inpainting with Gated Convolution](https://arxiv.org/abs/1806.03589)  
 Hyperparameter setting: maxVertex=100, maxLength=30, maxBrushWidth=10, maxAngle=2*np.pi   
 training is under going. This is 25000 iteration result with validation set.  
 ![Results2](test_25000.jpg)
