@@ -37,7 +37,7 @@ class VGG16FeatureExtractor(nn.Module):
         self.enc_2 = nn.Sequential(*vgg16.features[5:10])
         self.enc_3 = nn.Sequential(*vgg16.features[10:17])
 
-        # fix the encoder
+        # fix the encodee
         for i in range(3):
             for param in getattr(self, 'enc_{:d}'.format(i + 1)).parameters():
                 param.requires_grad = False
@@ -57,7 +57,7 @@ class PartialConv(nn.Module):
         self.input_conv = nn.Conv2d(in_channels, out_channels, kernel_size,
                                     stride, padding, dilation, groups, bias)
         self.mask_conv = nn.Conv2d(in_channels, out_channels, kernel_size,
-                                   stride, padding, dilation, groups, False)
+                                   stride, padding, dilation, groups, bias)
         self.input_conv.apply(weights_init('kaiming'))
 
         torch.nn.init.constant_(self.mask_conv.weight, 1.0)
@@ -92,19 +92,52 @@ class PartialConv(nn.Module):
 
         return output, new_mask
 
+class GatedConv(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
+                 padding=0, dilation=1, groups=1, bias=True):
+        super().__init__()
+        self.input_conv = nn.Conv2d(in_channels, out_channels, kernel_size,
+                                    stride, padding, dilation, groups, bias)
+        self.mask_conv = nn.Conv2d(in_channels, out_channels, kernel_size,
+                                   stride, padding, dilation, groups, bias)
+        self.input_conv.apply(weights_init('kaiming'))
+        self.mask_conv.apply(weights_init('kaiming'))
+        
+        self.relu = nn.ReLU()
+
+    def HardSigmoid(self,x):
+        return 0.5 * (self.relu(x+1)-self.relu(x-1))
+        
+    def forward(self, input, mask):
+        # http://masc.cs.gmu.edu/wiki/partialconv
+        # C(X) = W^T * X + b, C(0) = b, D(M) = 1 * M + 0 = sum(M)
+        # W^T* (M .* X) / sum(M) + b = [C(M .* X) – C(0)] / D(M) + C(0)
+
+        x_in = input * mask
+        output = self.input_conv(x_in)
+        output_mask = self.mask_conv(x_in)
+
+        new_mask = self.HardSigmoid(output_mask)
+
+        return output, new_mask
+
 
 class PCBActiv(nn.Module):
     def __init__(self, in_ch, out_ch, bn=True, sample='none-3', activ='relu',
                  conv_bias=False):
         super().__init__()
         if sample == 'down-5':
-            self.conv = PartialConv(in_ch, out_ch, 5, 2, 2, bias=conv_bias)
+            #self.conv = PartialConv(in_ch, out_ch, 5, 2, 2, bias=conv_bias)
+            self.conv = GatedConv(in_ch, out_ch, 5, 2, 2, bias=conv_bias)
         elif sample == 'down-7':
-            self.conv = PartialConv(in_ch, out_ch, 7, 2, 3, bias=conv_bias)
+            #self.conv = PartialConv(in_ch, out_ch, 7, 2, 3, bias=conv_bias)
+            self.conv = GatedConv(in_ch, out_ch, 7, 2, 3, bias=conv_bias)
         elif sample == 'down-3':
-            self.conv = PartialConv(in_ch, out_ch, 3, 2, 1, bias=conv_bias)
+            #self.conv = PartialConv(in_ch, out_ch, 3, 2, 1, bias=conv_bias)
+            self.conv = GatedConv(in_ch, out_ch, 3, 2, 1, bias=conv_bias)
         else:
-            self.conv = PartialConv(in_ch, out_ch, 3, 1, 1, bias=conv_bias)
+            #self.conv = PartialConv(in_ch, out_ch, 3, 1, 1, bias=conv_bias)
+            self.conv = GatedConv(in_ch, out_ch, 3, 1, 1, bias=conv_bias)
 
         if bn:
             self.bn = nn.BatchNorm2d(out_ch)
