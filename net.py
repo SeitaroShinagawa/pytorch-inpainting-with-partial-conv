@@ -128,22 +128,27 @@ class PConvUNet(nn.Module):
         self.freeze_enc_bn = False
         self.upsampling_mode = upsampling_mode
         self.layer_size = layer_size
-        self.enc_1 = PCBActiv(input_channels, 64, bn=False, sample='down-7')
-        self.enc_2 = PCBActiv(64, 128, sample='down-5')
-        self.enc_3 = PCBActiv(128, 256, sample='down-5')
-        self.enc_4 = PCBActiv(256, 512, sample='down-3')
-        for i in range(4, self.layer_size):
+        self.enc_1 = PCBActiv(input_channels, 64, bn=False, sample='down-7')#1/2
+        self.enc_2 = PCBActiv(64, 128, sample='down-5')                     #1/4
+        self.enc_3 = PCBActiv(128, 256, sample='down-5')                    #1/8
+        self.enc_4 = PCBActiv(256, 512, sample='down-3')                    #1/16
+        for i in range(4, self.layer_size-1):                               #1/2^(layer_size)=2,1/128 with input_size=256x256 
             name = 'enc_{:d}'.format(i + 1)
             setattr(self, name, PCBActiv(512, 512, sample='down-3'))
 
-        for i in range(4, self.layer_size):
+        name = 'enc_{:d}'.format(self.layer_size)
+        setattr(self, name, PCBActiv(512, 512*4, sample='down-3'))          #2x2
+
+        for i in range(4, self.layer_size):                                 
             name = 'dec_{:d}'.format(i + 1)
-            setattr(self, name, PCBActiv(512 + 512, 512, activ='leaky'))
-        self.dec_4 = PCBActiv(512 + 256, 256, activ='leaky')
-        self.dec_3 = PCBActiv(256 + 128, 128, activ='leaky')
-        self.dec_2 = PCBActiv(128 + 64, 64, activ='leaky')
+            setattr(self, name, PCBActiv(512 + 512, 512*4, activ='leaky'))  #1/2^(layer_size) -> 1/16
+        self.dec_4 = PCBActiv(512 + 256, 256*4, activ='leaky')              #1/8
+        self.dec_3 = PCBActiv(256 + 128, 128*4, activ='leaky')              #1/4
+        self.dec_2 = PCBActiv(128 + 64, 64*4, activ='leaky')                #1/2
         self.dec_1 = PCBActiv(64 + input_channels, input_channels,
                               bn=False, activ=None, conv_bias=True)
+
+        self.ps = nn.PixelShuffle(2) #upscale_factor=2
 
     def forward(self, input, input_mask):
         h_dict = {}  # for the output of enc_N
@@ -171,9 +176,12 @@ class PConvUNet(nn.Module):
             enc_h_key = 'h_{:d}'.format(i - 1)
             dec_l_key = 'dec_{:d}'.format(i)
 
-            h = F.interpolate(h, scale_factor=2, mode=self.upsampling_mode)
-            h_mask = F.interpolate(
-                h_mask, scale_factor=2, mode='nearest')
+            #h = F.interpolate(h, scale_factor=2, mode=self.upsampling_mode)
+            #h_mask = F.interpolate(
+            #    h_mask, scale_factor=2, mode='nearest')
+
+            h = self.ps(h)
+            h_mask = self.ps(h_mask)
 
             h = torch.cat([h, h_dict[enc_h_key]], dim=1)
             h_mask = torch.cat([h_mask, h_mask_dict[enc_h_key]], dim=1)
